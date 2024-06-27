@@ -19,55 +19,15 @@
 /* length of unique message (TODO below) should shorter than this */
 #define MAX_MSG_LEN 32
 
-/*
- * Too much concurrent connection would be treated as sort of DDoS attack
- * (mainly caused by configs (kernel: "tcp_max_syn_backlog" and
- * "somaxconn". Application (kecho): "backlog"). Nevertheless, default
- * maximum number of fd per-process is 1024. If you insist to proceed
- * the benchmarking with "MAX_THREAD" larger than these limitation,
- * perform following modifications:
- *
- * (1)
- * Use following commands to adjust kernel attributes:
- *     a. "$ sudo sysctl net.core.somaxconn={depends_on_MAX_THREAD}"
- *     b. "$ sudo sysctl net.ipv4.tcp_max_syn_backlog={ditto}"
- * Note that "$ sudo sysctl net.core.somaxconn" can get current value.
- * "somaxconn" is max amount of established connection, whereas
- * "tcp_max_syn_backlog" is max amount of connection at first step
- * of TCP 3-way handshake (SYN).
- *
- * (2)
- * Use command "$ ulimit -n {ditto}" to enlarge limitation of fd
- * per-process. Note that this modification only effects on process
- * which executes the command and its child processes.
- *
- * (3)
- * Specify "backlog" with value as large as "net.ipv4.tcp_max_syn_backlog".
- *
- * Remember to reset the modifications after benchmarking to keep
- * stability of running machine
- */
 #define MAX_THREAD 1000
 
-/*
- * TODO: provide unique message (maybe generate dynamically, or somehow) for
- * each worker could produce benchmarking result which is more conforms to
- * realworld usage.
- */
 static const char *msg_dum = "dummy message";
 
 static pthread_t pt[MAX_THREAD];
-
-/* block all workers before they are all ready to benchmarking kecho */
 static int n_retry;
 
-static pthread_mutex_t res_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t worker_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_wait = PTHREAD_COND_INITIALIZER;
-
-static long time_res[MAX_THREAD] = {0};
-static int idx = 0; /* for indexing "time_res" */
-static FILE *bench_fd;
 
 static inline long time_diff_us(struct timeval *start, struct timeval *end)
 {
@@ -101,6 +61,7 @@ static void *bench_worker(__attribute__((unused)))
         perror("socket");
         exit(-1);
     }
+    printf("Socket created.\n");
 
     struct sockaddr_in info = {
         .sin_family = PF_INET,
@@ -112,13 +73,22 @@ static void *bench_worker(__attribute__((unused)))
         perror("connect");
         exit(-1);
     }
+    printf("Connected.\n");
 
     gettimeofday(&start, NULL);
+
+    printf("Sending....\n");
     send(sock_fd, msg_dum, strlen(msg_dum), 0);
+    printf("Finish sending!\n");
+
+    printf("Recving....\n");
     recv(sock_fd, dummy, MAX_MSG_LEN, 0);
+    printf("Finish recving!\n");
+
     gettimeofday(&end, NULL);
 
     shutdown(sock_fd, SHUT_RDWR);
+    printf("SHUTDOWN.\n");
     close(sock_fd);
 
     if (strncmp(msg_dum, dummy, strlen(msg_dum))) {
@@ -126,9 +96,16 @@ static void *bench_worker(__attribute__((unused)))
         exit(-1);
     }
 
-    pthread_mutex_lock(&res_lock);
-    time_res[idx++] += time_diff_us(&start, &end);
-    pthread_mutex_unlock(&res_lock);
+    long elapsed_time = time_diff_us(&start, &end);
+
+    FILE *bench_fd = fopen(BENCHMARK_RESULT_FILE, "a");
+    if (!bench_fd) {
+        perror("fopen");
+        exit(-1);
+    }
+    fprintf(bench_fd, "Thread %ld %ld\n", pthread_self(),
+            elapsed_time /= BENCH_COUNT);
+    fclose(bench_fd);
 
     pthread_exit(NULL);
 }
@@ -152,25 +129,20 @@ static void bench(void)
 
         for (int x = 0; x < MAX_THREAD; x++)
             pthread_join(pt[x], NULL);
-
-        idx = 0;
     }
-
-    for (int i = 0; i < MAX_THREAD; i++)
-        fprintf(bench_fd, "%d %ld\n", i, time_res[i] /= BENCH_COUNT);
 }
 
 int main(void)
 {
-    bench_fd = fopen(BENCHMARK_RESULT_FILE, "w");
+    // Ensure the file is empty before starting the benchmark
+    FILE *bench_fd = fopen(BENCHMARK_RESULT_FILE, "w");
     if (!bench_fd) {
         perror("fopen");
         return -1;
     }
+    fclose(bench_fd);
 
     bench();
-
-    fclose(bench_fd);
 
     return 0;
 }

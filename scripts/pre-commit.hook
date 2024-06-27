@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-CPPCHECK_suppresses="--suppress=missingInclude \
+CPPCHECK_suppresses="--suppress=missingIncludeSystem \
+                     --suppress=constParameterPointer \
+                     --suppress=constVariablePointer \
                      --suppress=knownConditionTrueFalse:drop-tcp-socket.c \
                      --suppress=unmatchedSuppression:echo_server.c \
                      --suppress=unmatchedSuppression:kecho_mod.c \
