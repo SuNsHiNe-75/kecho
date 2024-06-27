@@ -13,7 +13,7 @@
 
 #define TARGET_HOST "127.0.0.1"
 #define TARGET_PORT 12345
-#define BENCH_COUNT 10
+#define BENCH_COUNT 1
 #define BENCHMARK_RESULT_FILE "bench.txt"
 
 /* length of unique message (TODO below) should shorter than this */
@@ -103,8 +103,7 @@ static void *bench_worker(__attribute__((unused)))
         perror("fopen");
         exit(-1);
     }
-    fprintf(bench_fd, "Thread %ld %ld\n", pthread_self(),
-            elapsed_time /= BENCH_COUNT);
+    fprintf(bench_fd, "Thread %ld %ld\n", pthread_self(), elapsed_time);
     fclose(bench_fd);
 
     pthread_exit(NULL);
