@@ -26,6 +26,7 @@ static const char *msg_dum = "dummy message";
 static pthread_t pt[MAX_THREAD];
 static int n_retry;
 
+static pthread_mutex_t time_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t worker_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t worker_wait = PTHREAD_COND_INITIALIZER;
 
@@ -96,6 +97,7 @@ static void *bench_worker(__attribute__((unused)))
         exit(-1);
     }
 
+    pthread_mutex_lock(&time_lock);
     long elapsed_time = time_diff_us(&start, &end);
 
     FILE *bench_fd = fopen(BENCHMARK_RESULT_FILE, "a");
@@ -104,6 +106,8 @@ static void *bench_worker(__attribute__((unused)))
         exit(-1);
     }
     fprintf(bench_fd, "Thread %ld %ld\n", pthread_self(), elapsed_time);
+    pthread_mutex_unlock(&time_lock);
+
     fclose(bench_fd);
 
     pthread_exit(NULL);
